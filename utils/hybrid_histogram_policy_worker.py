@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.rcParams['font.sans-serif'] = ['SimHei'] # For Chinese characters
 matplotlib.rcParams['axes.unicode_minus'] = False #For plus and minus signs
 
-
+from utils.config import Config
 # One Histogram for one application
 class HybridHistogramPolicyWorker(object):
     def __init__(self, config):
