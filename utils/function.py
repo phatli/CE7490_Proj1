@@ -5,7 +5,7 @@ class Function(object):
         self.func_name = func_name
         self.func_start_time = start_time
         self.func_duration = duration
-    def calculate_next_invocation(self, curr_time)
+    def calculate_next_invocation(self, curr_time):
         idle_time = random.randint(0, 100)
         return curr_time + idle_time
     def calculate_end_time(self):

@@ -18,4 +18,3 @@ class FunctionasServiceWorker(object):
         
     def process_invocation(self, curr_time):
         pass
-    
