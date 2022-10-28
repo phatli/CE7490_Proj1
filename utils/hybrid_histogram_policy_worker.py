@@ -126,6 +126,7 @@ class HybridHistogramPolicyWorker(object):
         idle_time_var = np.average((idle_time_mids - idle_time_mean)**2, weights=hist)
         #calculate idle time hist standard deviation
         idle_time_std = np.sqrt(idle_time_var)
+
         #calculate idle time coefficient of variation
         idle_time_cv = idle_time_std / idle_time_mean
         return idle_time_cv
