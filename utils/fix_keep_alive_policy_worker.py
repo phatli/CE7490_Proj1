@@ -11,10 +11,10 @@ matplotlib.rcParams['axes.unicode_minus'] = False #For plus and minus signs
 
 # Fix Keep Alive Window Policy
 class FixKeepAliveWindowPolicyWorker(object):
-    def __init__(self, fix_keep_alive_window_size=20):
-        self.keep_alive_window = fix_keep_alive_window_size
+    def __init__(self, config):
+        self.keep_alive_window = config.fix_keep_alive_window_size
         self.prewarm_window = 0
     
-    def process_invocation(self, curr_time):
-        return self.prewarm_window, self.keep_alive_window
+    def run_policy(self, idle_time):
+        return 0, self.keep_alive_window
 

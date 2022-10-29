@@ -32,9 +32,7 @@ class HybridHistogramPolicyWorker(object):
         # self.current_timestamp = 0
         self.previous_time = 0
     
-    def process_invocation(self, curr_time):
-        idle_time = curr_time - self.previous_time
-        self.previous_time = curr_time
+    def run_policy(self, idle_time):
         self.invoc_count += 1
         self.update_idle_time_list(idle_time)
         idle_time_hist, bins = self.update_idle_time_dist(idle_time)
@@ -153,3 +151,25 @@ class HybridHistogramPolicyWorker(object):
         if self.invoc_count > self.config.min_invoc_count:
             return True
         return False
+    
+        
+    # def process_invocation(self, curr_time):
+    #     idle_time = curr_time - self.previous_time
+    #     self.previous_time = curr_time
+    #     self.invoc_count += 1
+    #     self.update_idle_time_list(idle_time)
+    #     idle_time_hist, bins = self.update_idle_time_dist(idle_time)
+        
+    #     if self.is_too_many_oob_its(idle_time):
+    #         # Use ARIMA
+    #         self.prewarm_window, self.keep_alive_window = self.auto_arima_forcast()
+    #     else:
+    #         if self.is_enough_invocations() and self.is_pattern_representative(idle_time_hist, bins):
+    #             # Use histogram
+    #             self.prewarm_window, self.keep_alive_window = self.histogram_forcast(idle_time_hist)
+    #         else:
+    #             # Standard keep alive strategy
+    #             self.prewarm_window = 0
+    #             self.keep_alive_window = self.hist_range
+                
+    #     return self.prewarm_window, self.keep_alive_window
