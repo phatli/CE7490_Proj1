@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.rcParams['font.sans-serif'] = ['SimHei'] # For Chinese characters
 matplotlib.rcParams['axes.unicode_minus'] = False #For plus and minus signs
 
+from utils.config import Config
 
 # One Histogram for one application
 class HybridHistogramPolicyWorker(object):
@@ -23,15 +24,15 @@ class HybridHistogramPolicyWorker(object):
         self.invoc_count = 0
         
         self.hist_range = self.config.idle_time_uper_bound - 0
+
         #Keep a list of in bound idle times to make distribution 
         self.in_bound_idle_time_lists = []
+        
         #For calculating the app's IT
         # self.current_timestamp = 0
         self.previous_time = 0
     
-    def process_invocation(self, curr_time):
-        idle_time = curr_time - self.previous_time
-        self.previous_time = curr_time
+    def run_policy(self, idle_time):
         self.invoc_count += 1
         self.update_idle_time_list(idle_time)
         idle_time_hist, bins = self.update_idle_time_dist(idle_time)
@@ -40,13 +41,14 @@ class HybridHistogramPolicyWorker(object):
             # Use ARIMA
             self.prewarm_window, self.keep_alive_window = self.auto_arima_forcast()
         else:
-            if self.is_enough_invocations() and self.is_pattern_representative():
+            if self.is_enough_invocations() and self.is_pattern_representative(idle_time_hist, bins):
                 # Use histogram
                 self.prewarm_window, self.keep_alive_window = self.histogram_forcast(idle_time_hist)
             else:
                 # Standard keep alive strategy
                 self.prewarm_window = 0
                 self.keep_alive_window = self.hist_range
+                
         return self.prewarm_window, self.keep_alive_window
 
     def update_idle_time_list(self, idle_time):
@@ -112,17 +114,23 @@ class HybridHistogramPolicyWorker(object):
         plt.title(title)
         plt.show()
     
-    def caculate_idle_time_cv(self):
-        #calculate idle time standard deviation
-        idle_time_std = np.std(self.in_bound_idle_time_lists)
-        #calculate idle time mean
-        idle_time_mean = np.mean(self.in_bound_idle_time_lists)
+    def caculate_idle_time_cv(self, hist, bins):
+        # https://stackoverflow.com/questions/50786699/how-to-calculate-the-standard-deviation-from-a-histogram-python-matplotlib
+        #calculate idle time hist mid
+        idle_time_mids = 0.5*(bins[1:] + bins[:-1])
+        #calculate idle time hist mean
+        idle_time_mean = np.average(idle_time_mids, weights=hist)
+        #calculate idle time hist variance
+        idle_time_var = np.average((idle_time_mids - idle_time_mean)**2, weights=hist)
+        #calculate idle time hist standard deviation
+        idle_time_std = np.sqrt(idle_time_var)
+
         #calculate idle time coefficient of variation
         idle_time_cv = idle_time_std / idle_time_mean
         return idle_time_cv
     
-    def is_pattern_representative(self):
-        it_cv = self.caculate_idle_time_cv()
+    def is_pattern_representative(self, hist, bins):
+        it_cv = self.caculate_idle_time_cv(hist, bins)
         if it_cv > self.config.idle_time_cv_thres:
             return True
         else:
@@ -143,3 +151,25 @@ class HybridHistogramPolicyWorker(object):
         if self.invoc_count > self.config.min_invoc_count:
             return True
         return False
+    
+        
+    # def process_invocation(self, curr_time):
+    #     idle_time = curr_time - self.previous_time
+    #     self.previous_time = curr_time
+    #     self.invoc_count += 1
+    #     self.update_idle_time_list(idle_time)
+    #     idle_time_hist, bins = self.update_idle_time_dist(idle_time)
+        
+    #     if self.is_too_many_oob_its(idle_time):
+    #         # Use ARIMA
+    #         self.prewarm_window, self.keep_alive_window = self.auto_arima_forcast()
+    #     else:
+    #         if self.is_enough_invocations() and self.is_pattern_representative(idle_time_hist, bins):
+    #             # Use histogram
+    #             self.prewarm_window, self.keep_alive_window = self.histogram_forcast(idle_time_hist)
+    #         else:
+    #             # Standard keep alive strategy
+    #             self.prewarm_window = 0
+    #             self.keep_alive_window = self.hist_range
+                
+    #     return self.prewarm_window, self.keep_alive_window

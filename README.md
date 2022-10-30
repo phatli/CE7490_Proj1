@@ -10,4 +10,5 @@ conda activate ce7490
 
 pip install simfaas
 pip install pmdarima
+pip install python-statemachine
 ```
