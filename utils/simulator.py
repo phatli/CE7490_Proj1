@@ -8,8 +8,8 @@ from os import makedirs
 
 
 class faasSimulator:
-    def __init__(self, data_dir, policy_worker):
-        self.policy_worker = policy_worker
+    def __init__(self, data_dir, worker_args):
+        self.worker_args = worker_args
         if not "json" in data_dir:
             self.apps_dict, self.total_step = self.__loadTrace(data_dir)
         else:
@@ -113,9 +113,10 @@ class faasSimulator:
         apps_lst = []
         for i, app_id in enumerate(apps_dict.keys(), 1):
             print(f"Registering {i}/{len(apps_dict)} app", end="\r")
-            app = fakeAPP(app_id, self.policy_worker)
+            app = fakeAPP(app_id, *self.worker_args)
             for func_id, func in apps_dict[app_id].items():
-                app.register_func(func_id, func["Average"])
+                app.register_func(func_id, math.ceil(
+                    sum(func["Average"])/len(func["Average"])/60000))
             apps_lst.append(app)
         print("")
         return apps_lst
@@ -132,24 +133,23 @@ class faasSimulator:
 
 
 class fakeAPP:
-    def __init__(self, app_id, policy_worker):
+    def __init__(self, app_id, POLICY_WORKER_CLASS, worker_config):
         self.app_id = app_id
-        self.prewarm_win = 240
-        self.keep_alive_win = 0
+        self.win_state = windowState(240, 0)
         self.run_state = False  # app not running => false, running => true
-        self.env_state = False  # warm => true, true => false
-        self.env_count = self.prewarm_win
         self.func_dict = {}
-        self.policy_worker = policy_worker
+        self.policy_worker = POLICY_WORKER_CLASS(worker_config)
         self.step_time = 0
         self.app_record = {}
+        self.init_env_record = []
+        self.releases_record = []
 
     def step(self, invocs_lst=[]):
         self.invoc_funcs(invocs_lst)
         isIdle = self.funcs_step()
         if self.run_state and not isIdle:
             self.end_exec()
-        self.env_step()
+        self.win_state.step()
         self.step_time += 1
 
     def end_exec(self):
@@ -157,24 +157,11 @@ class fakeAPP:
         """
         # invoc end, start counting IT
         self.run_state = False
-        self.prewarm_win, self.keep_alive_win = self.policy_worker.process_invocation(
-            self.step_time)
 
         # At the end of execution, need to change to pre-warm state
-        self.env_count = self.prewarm_win
+        self.win_state.start()
         # if prewarm_win is 0, then env_state will be updated to True in env_step()
-        self.env_state = False
-
-    def env_step(self):
-        if self.env_count == 0:
-            if self.env_state:
-                # Change from keep-alive to pre-warm
-                self.env_count = self.prewarm_win
-                self.env_state = False
-            else:
-                self.env_count = self.keep_alive_win
-                self.env_state = True
-        self.env_count -= 1
+        self.releases_record.append(self.step_time)
 
     def funcs_step(self):
         """Run a step of all funcs
@@ -190,12 +177,25 @@ class fakeAPP:
 
     def invoc_funcs(self, invocs_lst):
         if invocs_lst:
+            if not self.get_env_state():
+                # Load env
+                self.win_state.stop_and_reset()  # Stop and reset envWatcher until execution ended
+                if len(self.releases_record) > 0:
+                    self.prewarm_win, self.keep_alive_win = self.policy_worker.run_policy(
+                        self.step_time - self.releases_record[-1])
+                    self.policy_worker.vis_histogram
+
             self.run_state = True
-            self.env_state = True
             for func_id in invocs_lst:
                 assert func_id in self.func_dic.keys(
                 ), "Function ID not found, please register it first"
                 self.func_dict[func_id].exec()
+
+    def get_env_state(self):
+        if self.win_state.enable:
+            return self.win_state.state
+        else:
+            return self.run_state
 
     def register_func(self, func_id, exec_time):
         func = fakeFunc(func_id, exec_time)
@@ -227,6 +227,39 @@ class fakeFunc:
             if self.count == 0:
                 self.count = self.exec_time
                 self.state = False
+
+
+class windowState:
+    def __init__(self, prewarm_win, keep_alive_win):
+        self.state = False  # False: prewarm, True: keep_alive
+        self.prewarm_win = prewarm_win
+        self.keep_alive_win = keep_alive_win
+        self.count = self.prewarm_win
+        self.enable = True
+
+    def step(self):
+        if self.enable:
+            while (self.count == 0):
+                # Change from keep-alive to pre-warm
+                self.enter_prewarm() if self.state else self.enter_keep_alive()
+
+            self.count -= 1
+
+    def stop_and_reset(self):
+        self.enable = False
+        self.count = self.prewarm_win
+        self.state = False
+
+    def start(self):
+        self.enable = True
+
+    def enter_prewarm(self):
+        self.count = self.prewarm_win
+        self.state = False
+
+    def enter_keep_alive(self):
+        self.count = self.keep_alive_win
+        self.state = True
 
 
 def getAttrsFromObjects(list_of_objects, attr_name):

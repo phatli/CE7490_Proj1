@@ -1,5 +1,5 @@
 #config for the hybrid histogram policy
-idle_time_uper_bound: 200
+idle_time_uper_bound: 240
 min_invoc_count: 20
 max_oob_count: 10
 idle_time_cv_thres: 2
