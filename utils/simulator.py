@@ -3,16 +3,20 @@ import pandas as pd
 import math
 import os
 import json
-from os.path import exists
+import pickle
+from os.path import exists, join
 from os import makedirs
+from .hybrid_histogram_policy_worker import ROOT_DIR
 
 
 class faasSimulator:
     def __init__(self, data_dir, worker_args):
         self.worker_args = worker_args
         if not "json" in data_dir:
+            self.dataset_name = data_dir.split('/')[-1]
             self.apps_dict, self.total_step = self.__loadTrace(data_dir)
         else:
+            self.dataset_name = data_dir.split('/')[-1].split('.')[0]
             with open(data_dir, 'rb') as f:
                 self.apps_dict = json.load(f)
                 self.total_step = 14 * 60 * 24
@@ -106,7 +110,7 @@ class faasSimulator:
                         invoc_lsts[invoc_idx][app_id] = [func_id]
                     else:
                         invoc_lsts[invoc_idx][app_id].append(func_id)
-        print("")
+
         return invoc_lsts
 
     def __registerAPP(self, apps_dict):
@@ -126,10 +130,13 @@ class faasSimulator:
 
     def run_sim(self):
         for t in range(self.total_step):
-            print(f"Simulating step {t}/{self.total_step}")
-            for app in self.apps_lst:
-                app.step(
-                    self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
+            print(f"Simulating step {t}/{self.total_step}", end="\r")
+            # for app in self.apps_lst:
+            #     app.step(
+            #         self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
+            app = self.apps_lst[0]
+            app.step(
+                self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
 
 
 class fakeAPP:
@@ -138,7 +145,7 @@ class fakeAPP:
         self.win_state = windowState(240, 0)
         self.run_state = False  # app not running => false, running => true
         self.func_dict = {}
-        self.policy_worker = POLICY_WORKER_CLASS(worker_config)
+        self.policy_worker = POLICY_WORKER_CLASS(worker_config, app_id)
         self.step_time = 0
         self.app_record = {}
         self.init_env_record = []
@@ -183,11 +190,10 @@ class fakeAPP:
                 if len(self.releases_record) > 0:
                     self.prewarm_win, self.keep_alive_win = self.policy_worker.run_policy(
                         self.step_time - self.releases_record[-1])
-                    self.policy_worker.vis_histogram
 
             self.run_state = True
             for func_id in invocs_lst:
-                assert func_id in self.func_dic.keys(
+                assert func_id in self.func_dict.keys(
                 ), "Function ID not found, please register it first"
                 self.func_dict[func_id].exec()
 
@@ -223,10 +229,10 @@ class fakeFunc:
 
     def step(self):
         if self.state:
-            self.count -= 1
             if self.count == 0:
                 self.count = self.exec_time
                 self.state = False
+            self.count -= 1
 
 
 class windowState:

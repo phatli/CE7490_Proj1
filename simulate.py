@@ -7,6 +7,7 @@ def main():
     data_dir = "data/azurefunctions-dataset2019.json"
     worker_args = (HybridHistogramPolicyWorker, config)
     sim = faasSimulator(data_dir, worker_args)
+    sim.run_sim()
 
 
 if __name__ == '__main__':

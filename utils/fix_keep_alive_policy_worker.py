@@ -6,8 +6,8 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.rcParams['font.sans-serif'] = ['SimHei'] # For Chinese characters
-matplotlib.rcParams['axes.unicode_minus'] = False #For plus and minus signs
+# matplotlib.rcParams['font.sans-serif'] = ['SimHei'] # For Chinese characters
+# matplotlib.rcParams['axes.unicode_minus'] = False #For plus and minus signs
 
 # Fix Keep Alive Window Policy
 class FixKeepAliveWindowPolicyWorker(object):

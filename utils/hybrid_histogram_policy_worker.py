@@ -8,9 +8,6 @@ import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # For Chinese characters
-matplotlib.rcParams['axes.unicode_minus'] = False  # For plus and minus signs
 
 ROOT_DIR = abspath(
     join(dirname(__file__), pardir))
@@ -41,7 +38,7 @@ class HybridHistogramPolicyWorker(object):
         self.invoc_count += 1
         self.update_idle_time_list(idle_time)
         idle_time_hist, bins = self.update_idle_time_dist(idle_time)
-        self.vis_histogram(idle_time_hist)
+        self.vis_histogram(self.in_bound_idle_time_lists)
 
         if self.is_too_many_oob_its(idle_time):
             # Use ARIMA
@@ -118,7 +115,8 @@ class HybridHistogramPolicyWorker(object):
         return prewarm_window, keep_alive_window
 
     def vis_histogram(self, data, title='App\'s Idle Time Distribution'):
-        plt.hist(data, bins=40, normed=0, facecolor="blue",
+        plt.clf()
+        plt.hist(data, bins=40, facecolor="blue",
                  edgecolor="black", alpha=0.7)
         plt.xlabel("Idle Time")
         plt.ylabel("Frequency")
