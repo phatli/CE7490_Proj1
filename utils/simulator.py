@@ -129,14 +129,25 @@ class faasSimulator:
         return self.total_step
 
     def run_sim(self):
-        for t in range(self.total_step):
-            print(f"Simulating step {t}/{self.total_step}", end="\r")
+        result = {}
+        if not exists(join(ROOT_DIR, "results")):
+            makedirs(join(ROOT_DIR, "results"))
+        output_path = join(
+            ROOT_DIR, "results", f"{self.worker_args[0].get_name(self.worker_args[1])}.json")
+        for i, app in enumerate(self.apps_lst):
+            for t in range(self.total_step):
+                print(
+                    f"Simulating step {t}/{self.total_step} in {i}/{len(apps_lst)} app", end="\r")
             # for app in self.apps_lst:
             #     app.step(
             #         self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
-            app = self.apps_lst[0]
-            app.step(
-                self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
+                app.step(
+                    self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
+            result[app.app_id] = app.get_record()
+
+        print("")
+        with open(output_path, 'w') as f:
+            json.dump(result, f)
 
 
 class fakeAPP:
@@ -147,9 +158,7 @@ class fakeAPP:
         self.func_dict = {}
         self.policy_worker = POLICY_WORKER_CLASS(worker_config, app_id)
         self.step_time = 0
-        self.app_record = {}
-        self.init_env_record = []
-        self.releases_record = []
+        self.init_record()
 
     def step(self, invocs_lst=[]):
         self.invoc_funcs(invocs_lst)
@@ -157,6 +166,7 @@ class fakeAPP:
         if self.run_state and not isIdle:
             self.end_exec()
         self.win_state.step()
+        self.record_state()
         self.step_time += 1
 
     def end_exec(self):
@@ -185,11 +195,14 @@ class fakeAPP:
     def invoc_funcs(self, invocs_lst):
         if invocs_lst:
             if not self.get_env_state():
+                self.coldstart_record.append(self.step_time)
                 # Load env
                 self.win_state.stop_and_reset()  # Stop and reset envWatcher until execution ended
                 if len(self.releases_record) > 0:
                     self.prewarm_win, self.keep_alive_win = self.policy_worker.run_policy(
                         self.step_time - self.releases_record[-1])
+            else:
+                self.warm_state_record.append(self.step_time)
 
             self.run_state = True
             for func_id in invocs_lst:
@@ -206,6 +219,32 @@ class fakeAPP:
     def register_func(self, func_id, exec_time):
         func = fakeFunc(func_id, exec_time)
         self.func_dict[func_id] = func
+
+    def init_record(self):
+        self.releases_record = []
+        self.coldstart_record = []
+        self.warmstart_record = []
+        self.warm_state_record = []
+        self.run_state_record = []
+        self.win_state_record = []
+
+    def record_state(self):
+        if self.get_env_state():
+            self.warm_state_record.append(self.step_time)
+        if self.run_state:
+            self.run_state_record.append(self.step_time)
+        if self.win_state.state:
+            self.win_state_record.append(self.step_time)
+
+    def get_record(self):
+        return {
+            "release": self.releases_record,
+            "coldstart": self.coldstart_record,
+            "warmstart": self.warmstart_record,
+            "warm_state": self.warm_state_record,
+            "run_state": self.run_state_record,
+            "win_state": self.win_state_record
+        }
 
 
 class fakeFunc:

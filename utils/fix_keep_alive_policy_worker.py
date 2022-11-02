@@ -18,3 +18,7 @@ class FixKeepAliveWindowPolicyWorker(object):
     def run_policy(self, idle_time):
         return 0, self.keep_alive_window
 
+    @staticmethod
+    def get_name(config):
+        return f"FixKeepAliveWindowPolicy_{config.fix_keep_alive_window_size}"
+

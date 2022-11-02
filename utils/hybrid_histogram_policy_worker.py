@@ -16,7 +16,7 @@ ROOT_DIR = abspath(
 # One Histogram for one application
 
 class HybridHistogramPolicyWorker(object):
-    def __init__(self, config, app_id, vis_dir=join(ROOT_DIR,"data/vis_hist")):
+    def __init__(self, config, app_id, vis_dir=join(ROOT_DIR, "data/vis_hist")):
         self.config = config
         self.keep_alive_window = 0
         self.prewarm_window = 0
@@ -164,6 +164,10 @@ class HybridHistogramPolicyWorker(object):
         if self.invoc_count > self.config.min_invoc_count:
             return True
         return False
+
+    @staticmethod
+    def get_name(config):
+        return "HybridHistogramPolicy"
 
     # def process_invocation(self, curr_time):
     #     idle_time = curr_time - self.previous_time
