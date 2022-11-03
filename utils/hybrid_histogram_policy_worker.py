@@ -20,7 +20,7 @@ class HybridHistogramPolicyWorker(object):
         self.config = config
         self.bins_num = 20
         self.keep_alive_window = 0
-        self.prewarm_window = 0
+        self.prewarm_window = 240
         self.oob_count = 0
         self.invoc_count = 0
         self.app_id = app_id
@@ -49,7 +49,7 @@ class HybridHistogramPolicyWorker(object):
             # Use ARIMA
             self.prewarm_window, self.keep_alive_window = self.auto_arima_forcast()
         else:
-            if self.is_enough_invocations() and self.is_pattern_representative(idle_time_hist, bins):
+            if self.is_enough_invocations() and self.is_pattern_representative(idle_time_hist):
                 self.is_hist_triggered = True
                 # Use histogram
                 self.prewarm_window, self.keep_alive_window = self.histogram_forcast()
@@ -131,24 +131,13 @@ class HybridHistogramPolicyWorker(object):
             makedirs(self.vis_dir)
         plt.savefig(f"{join(self.vis_dir,self.app_id)}.png")
 
-    def caculate_idle_time_cv(self, hist, bins):
-        # https://stackoverflow.com/questions/50786699/how-to-calculate-the-standard-deviation-from-a-histogram-python-matplotlib
-        # calculate idle time hist mid
-        idle_time_mids = 0.5*(bins[1:] + bins[:-1])
-        # calculate idle time hist mean
-        idle_time_mean = np.average(idle_time_mids, weights=hist)
-        # calculate idle time hist variance
-        idle_time_var = np.average(
-            (idle_time_mids - idle_time_mean)**2, weights=hist)
-        # calculate idle time hist standard deviation
-        idle_time_std = np.sqrt(idle_time_var)
-
+    def caculate_idle_time_cv(self, hist_count):
         # calculate idle time coefficient of variation
-        idle_time_cv = idle_time_std / idle_time_mean
+        idle_time_cv = np.std(hist_count) / np.mean(hist_count)
         return idle_time_cv
 
-    def is_pattern_representative(self, hist, bins):
-        self.it_cv = self.caculate_idle_time_cv(hist, bins)
+    def is_pattern_representative(self, hist):
+        self.it_cv = self.caculate_idle_time_cv(hist)
         if self.it_cv > self.config.idle_time_cv_thres:
             return True
         else:

@@ -141,12 +141,12 @@ class faasSimulator:
 
     def run_sim(self):
 
-        chunk_size = len(self.apps_lst) // 5
-        with Pool(5) as p:
+        chunk_size = len(self.apps_lst) // 10
+        with Pool(10) as p:
             p.map(self.run_sim_app_lst, [self.apps_lst[i:i + chunk_size]
                   for i in range(0, len(self.apps_lst), chunk_size)])
 
-        # self.run_sim_app_lst(output_dir,self.apps_lst)
+        # self.run_sim_app_lst(self.apps_lst)
 
     def run_sim_app_lst(self, apps_lst):
         output_dir = join(
@@ -158,7 +158,7 @@ class faasSimulator:
             #     continue
             for t in range(self.total_step):
                 print(
-                    f"Simulating step {t}/{self.total_step} in {i}/{len(self.apps_lst)} app", end="\r")
+                    f"Simulating step {t}/{self.total_step} in {i}/{len(apps_lst)} app", end="\r")
                 app.step(
                     self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
                 if t == self.total_step-1 and self.save_vis_hist:
@@ -195,12 +195,15 @@ class fakeAPP:
         self.init_record()
 
     def step(self, invocs_lst=[]):
-        self.invoc_funcs(invocs_lst)
+        self.pre_funcs_invoc(invocs_lst)
         isIdle = self.funcs_step()
-        if self.run_state and not isIdle:
+        if self.run_state and isIdle:
             # must record exec_state before it was change
             self.run_state_record.append(self.step_time)
-            self.end_exec()
+            self.end_exec() # change run_state
+        elif invocs_lst:
+            self.run_state = True
+            
         self.win_state.step()
         self.record_state()
         self.step_time += 1
@@ -228,19 +231,26 @@ class fakeAPP:
             isIdle = isIdle and not func.state  # make sure every func is off now
         return isIdle
 
-    def invoc_funcs(self, invocs_lst):
+    def pre_funcs_invoc(self, invocs_lst):
+        """Manage windows state and interate with policy worker if funcs invocated
+
+        Args:
+            invocs_lst (_type_): list of invocations.
+        """        
         if invocs_lst:
-            if not self.get_env_state():
-                self.coldstart_record.append(self.step_time)
+            if not self.run_state:
+                if not self.get_env_state():
+                    self.coldstart_record.append(self.step_time)
+                else:
+                    self.warm_state_record.append(self.step_time)
                 # Load env
                 self.win_state.stop_and_reset()  # Stop and reset envWatcher until execution ended
                 if len(self.releases_record) > 0:
-                    self.prewarm_win, self.keep_alive_win = self.policy_worker.run_policy(
+                    self.win_state.prewarm_win, self.win_state.keep_alive_win = self.policy_worker.run_policy(
                         self.step_time - self.releases_record[-1])
             else:
                 self.warmstart_record.append(self.step_time)
-
-            self.run_state = True
+            
             for func_id in invocs_lst:
                 assert func_id in self.func_dict.keys(
                 ), "Function ID not found, please register it first"
@@ -262,13 +272,17 @@ class fakeAPP:
         self.warmstart_record = []
         self.warm_state_record = []
         self.run_state_record = []
-        self.win_state_record = []
+        self.prewarm_win_state_record = []
+        self.keeplive_win_state_record = []
 
     def record_state(self):
         if self.get_env_state():
             self.warm_state_record.append(self.step_time)
-        if self.win_state.state:
-            self.win_state_record.append(self.step_time)
+        if self.win_state.enable:
+            if self.win_state.state:
+                self.keeplive_win_state_record.append(self.step_time)
+            else:
+                self.prewarm_win_state_record.append(self.step_time)
 
     def get_record(self):
         return {
@@ -296,16 +310,15 @@ class fakeFunc:
         self.state = False  # True => execuating, False => Idle
 
     def exec(self):
-        if self.state:
-            self.count = self.exec_time
-        else:
-            self.state = True
+        self.count = self.exec_time
+        self.state = True
 
     def step(self):
         if self.state:
             if self.count == 0:
                 self.count = self.exec_time
                 self.state = False
+                return
             self.count -= 1
 
 
