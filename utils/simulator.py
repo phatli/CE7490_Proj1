@@ -3,14 +3,16 @@ import pandas as pd
 import math
 import os
 import json
-import pickle
 from os.path import exists, join
 from os import makedirs
 from .hybrid_histogram_policy_worker import ROOT_DIR
+from multiprocessing import Pool
 
 
 class faasSimulator:
     def __init__(self, data_dir, worker_args):
+        self.least_invoc_num = 15
+        self.save_vis_hist = False
         self.worker_args = worker_args
         if not "json" in data_dir:
             self.dataset_name = data_dir.split('/')[-1]
@@ -20,7 +22,7 @@ class faasSimulator:
             with open(data_dir, 'rb') as f:
                 self.apps_dict = json.load(f)
                 self.total_step = 14 * 60 * 24
-        self.__cleanIncompleteTrace()
+        self.__cleanBadTrace()
         assert self.__isCompleteTrace(
             self.apps_dict), "The apps_dict is not complete!"
         self.invoc_lsts = self.__getInvocLsts(self.apps_dict)
@@ -81,15 +83,24 @@ class faasSimulator:
         # app_dfs = [pd.read_csv(data_dir+file) for file in app_files]
         return apps_dict, total_step
 
-    def __cleanIncompleteTrace(self):
-        print(f"Cleaning incomplete traces.")
+    def __cleanBadTrace(self):
+        print(f"Cleaning incomplete traces & traces  with too little invoc...")
         func_2b_removed = []
+        app_2b_removed = []
         for app_id, funcs in self.apps_dict.items():
+            invoc_count = 0
             for func_id, func in funcs.items():
                 if not "invoc" in func.keys():
                     func_2b_removed.append([app_id, func_id])
+                else:
+                    invoc_count += 1
+            if invoc_count <= self.least_invoc_num:
+                app_2b_removed.append(app_id)
+
         for app_id, func_id in func_2b_removed:
             self.apps_dict[app_id].pop(func_id)
+        for app_id in app_2b_removed:
+            self.apps_dict.pop(app_id)
 
     def __isCompleteTrace(self, apps_dict):
         print(f"Checking if trace is complete")
@@ -129,25 +140,45 @@ class faasSimulator:
         return self.total_step
 
     def run_sim(self):
-        result = {}
+
+        chunk_size = len(self.apps_lst) // 5
+        with Pool(5) as p:
+            p.map(self.run_sim_app_lst, [self.apps_lst[i:i + chunk_size]
+                  for i in range(0, len(self.apps_lst), chunk_size)])
+
+        # self.run_sim_app_lst(output_dir,self.apps_lst)
+
+    def run_sim_app_lst(self, apps_lst):
         output_dir = join(
             ROOT_DIR, "results", f"{self.worker_args[0].get_name(self.worker_args[1])}")
         if not exists(output_dir):
             makedirs(output_dir)
-
-        for i, app in enumerate(self.apps_lst):
-            if exists(join(output_dir,f"{app.app_id}.json")):
-                continue
+        for i, app in enumerate(apps_lst):
+            # if exists(join(output_dir,f"{app.app_id}.json")):
+            #     continue
             for t in range(self.total_step):
                 print(
                     f"Simulating step {t}/{self.total_step} in {i}/{len(self.apps_lst)} app", end="\r")
                 app.step(
                     self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
-                if t == self.total_step-1:
+                if t == self.total_step-1 and self.save_vis_hist:
                     app.policy_worker.vis_histogram(
                         app.policy_worker.in_bound_idle_time_lists)
             result = app.get_record()
-            with open(join(output_dir,f"{app.app_id}.json"), 'w') as f:
+            if "HybridHistogramPolicy" in app.policy_worker.get_name(app.policy_worker.config):
+                if app.policy_worker.is_hist_triggered:
+                    output_file_dir = join(output_dir, "hist")
+                elif app.policy_worker.is_arima_triggered:
+                    output_file_dir = join(output_dir, "arima")
+                else:
+                    output_file_dir = join(output_dir, "fix")
+            else:
+                output_file_dir = output_dir
+
+            if not exists(output_file_dir):
+                os.makedirs(output_file_dir)
+
+            with open(join(output_file_dir, f"{app.app_id}.json"), 'w') as f:
                 json.dump(result, f)
 
         print("")
@@ -167,6 +198,8 @@ class fakeAPP:
         self.invoc_funcs(invocs_lst)
         isIdle = self.funcs_step()
         if self.run_state and not isIdle:
+            # must record exec_state before it was change
+            self.run_state_record.append(self.step_time)
             self.end_exec()
         self.win_state.step()
         self.record_state()
@@ -205,7 +238,7 @@ class fakeAPP:
                     self.prewarm_win, self.keep_alive_win = self.policy_worker.run_policy(
                         self.step_time - self.releases_record[-1])
             else:
-                self.warm_state_record.append(self.step_time)
+                self.warmstart_record.append(self.step_time)
 
             self.run_state = True
             for func_id in invocs_lst:
@@ -234,8 +267,6 @@ class fakeAPP:
     def record_state(self):
         if self.get_env_state():
             self.warm_state_record.append(self.step_time)
-        if self.run_state:
-            self.run_state_record.append(self.step_time)
         if self.win_state.state:
             self.win_state_record.append(self.step_time)
 
