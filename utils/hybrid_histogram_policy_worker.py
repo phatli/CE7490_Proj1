@@ -16,7 +16,7 @@ ROOT_DIR = abspath(
 # One Histogram for one application
 
 class HybridHistogramPolicyWorker(object):
-    def __init__(self, config, app_id, vis_dir=join(ROOT_DIR, "data/vis_hist")):
+    def __init__(self, config, app_id, vis_dir=join(ROOT_DIR, "results/vis_hist")):
         self.config = config
         self.keep_alive_window = 0
         self.prewarm_window = 0
@@ -38,7 +38,7 @@ class HybridHistogramPolicyWorker(object):
         self.invoc_count += 1
         self.update_idle_time_list(idle_time)
         idle_time_hist, bins = self.update_idle_time_dist(idle_time)
-        self.vis_histogram(self.in_bound_idle_time_lists)
+        # self.vis_histogram(self.in_bound_idle_time_lists)
 
         if self.is_too_many_oob_its(idle_time):
             # Use ARIMA
@@ -79,7 +79,7 @@ class HybridHistogramPolicyWorker(object):
         '''
 
         # Fit the model
-        arima = auto_arima(self.in_bound_idle_time_lists, start_p=0, start_q=10,
+        arima = auto_arima(self.in_bound_idle_time_lists, start_p=0, start_q=0,
                            max_p=6, max_q=6, max_d=2,
                            seasonal=True,
                            d=1, D=1, trace=True,

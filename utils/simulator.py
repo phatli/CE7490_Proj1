@@ -137,12 +137,15 @@ class faasSimulator:
         for i, app in enumerate(self.apps_lst):
             for t in range(self.total_step):
                 print(
-                    f"Simulating step {t}/{self.total_step} in {i}/{len(apps_lst)} app", end="\r")
+                    f"Simulating step {t}/{self.total_step} in {i}/{len(self.apps_lst)} app", end="\r")
             # for app in self.apps_lst:
             #     app.step(
             #         self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
                 app.step(
                     self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
+                if t == self.total_step-1:
+                    app.policy_worker.vis_histogram(
+                        app.policy_worker.in_bound_idle_time_lists)
             result[app.app_id] = app.get_record()
 
         print("")
