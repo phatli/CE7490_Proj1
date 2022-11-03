@@ -168,6 +168,13 @@ class HybridHistogramPolicyWorker(object):
     @staticmethod
     def get_name(config):
         return "HybridHistogramPolicy"
+    
+    def get_record(self):
+        return {
+            "idle_time": self.in_bound_idle_time_lists,
+            "invoc_count": self.invoc_count,
+            "oob_count": self.oob_count
+        }
 
     # def process_invocation(self, curr_time):
     #     idle_time = curr_time - self.previous_time

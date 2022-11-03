@@ -130,27 +130,27 @@ class faasSimulator:
 
     def run_sim(self):
         result = {}
-        if not exists(join(ROOT_DIR, "results")):
-            makedirs(join(ROOT_DIR, "results"))
-        output_path = join(
-            ROOT_DIR, "results", f"{self.worker_args[0].get_name(self.worker_args[1])}.json")
+        output_dir = join(
+            ROOT_DIR, "results", f"{self.worker_args[0].get_name(self.worker_args[1])}")
+        if not exists(output_dir):
+            makedirs(output_dir)
+
         for i, app in enumerate(self.apps_lst):
+            if exists(join(output_dir,f"{app.app_id}.json")):
+                continue
             for t in range(self.total_step):
                 print(
                     f"Simulating step {t}/{self.total_step} in {i}/{len(self.apps_lst)} app", end="\r")
-            # for app in self.apps_lst:
-            #     app.step(
-            #         self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
                 app.step(
                     self.invoc_lsts[t][app.app_id] if app.app_id in self.invoc_lsts[t].keys() else [])
                 if t == self.total_step-1:
                     app.policy_worker.vis_histogram(
                         app.policy_worker.in_bound_idle_time_lists)
-            result[app.app_id] = app.get_record()
+            result = app.get_record()
+            with open(join(output_dir,f"{app.app_id}.json"), 'w') as f:
+                json.dump(result, f)
 
         print("")
-        with open(output_path, 'w') as f:
-            json.dump(result, f)
 
 
 class fakeAPP:
@@ -246,7 +246,8 @@ class fakeAPP:
             "warmstart": self.warmstart_record,
             "warm_state": self.warm_state_record,
             "run_state": self.run_state_record,
-            "win_state": self.win_state_record
+            "win_state": self.win_state_record,
+            "policy_record": self.policy_worker.get_record()
         }
 
 

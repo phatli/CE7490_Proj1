@@ -14,11 +14,18 @@ class FixKeepAliveWindowPolicyWorker(object):
     def __init__(self, config):
         self.keep_alive_window = config.fix_keep_alive_window_size
         self.prewarm_window = 0
+        self.invoc_count = 0
     
     def run_policy(self, idle_time):
+        self.invoc_count += 1
         return 0, self.keep_alive_window
 
     @staticmethod
     def get_name(config):
         return f"FixKeepAliveWindowPolicy_{config.fix_keep_alive_window_size}"
+
+    def get_record(self):
+        return {
+            "invoc_count": self.invoc_count
+        }
 
