@@ -18,12 +18,16 @@ ROOT_DIR = abspath(
 class HybridHistogramPolicyWorker(object):
     def __init__(self, config, app_id, vis_dir=join(ROOT_DIR, "results/vis_hist")):
         self.config = config
+        self.bins_num = 20
         self.keep_alive_window = 0
         self.prewarm_window = 0
         self.oob_count = 0
         self.invoc_count = 0
         self.app_id = app_id
         self.vis_dir = vis_dir
+        self.it_cv = 0
+        self.is_hist_triggered = False
+        self.is_arima_triggered = False
 
         self.hist_range = self.config.idle_time_uper_bound - 0
 
@@ -37,17 +41,18 @@ class HybridHistogramPolicyWorker(object):
     def run_policy(self, idle_time):
         self.invoc_count += 1
         self.update_idle_time_list(idle_time)
-        idle_time_hist, bins = self.update_idle_time_dist(idle_time)
+        idle_time_hist, bins = self.update_idle_time_dist()
         # self.vis_histogram(self.in_bound_idle_time_lists)
 
         if self.is_too_many_oob_its(idle_time):
+            self.is_arima_triggered = True
             # Use ARIMA
             self.prewarm_window, self.keep_alive_window = self.auto_arima_forcast()
         else:
             if self.is_enough_invocations() and self.is_pattern_representative(idle_time_hist, bins):
+                self.is_hist_triggered = True
                 # Use histogram
-                self.prewarm_window, self.keep_alive_window = self.histogram_forcast(
-                    idle_time_hist)
+                self.prewarm_window, self.keep_alive_window = self.histogram_forcast()
             else:
                 # Standard keep alive strategy
                 self.prewarm_window = 0
@@ -97,26 +102,26 @@ class HybridHistogramPolicyWorker(object):
             self.config.keep_alive_window_ratio  # 15%
         return prewarm_window, keep_alive_window
 
-    def update_idle_time_dist(self, idle_time, bins=40):
+    def update_idle_time_dist(self):
         # bins指定统计的区间个数
         # range是一个长度为2的元组，表示统计范围的最小值和最大值，默认值None，表示范围由数据的范围决定
         # weights为数组的每个元素指定了权值,histogram()会对区间中数组所对应的权值进行求和
         # density为True时，返回每个区间的概率密度为False，返回每个区间中元素的个数
         # create histogram from idle time list
         hist, bins = np.histogram(
-            self.in_bound_idle_time_lists, bins=bins, range=(0, self.hist_range))
+            self.in_bound_idle_time_lists, bins=self.bins_num, range=(0, self.hist_range))
         return hist, bins
 
-    def histogram_forcast(self, hist):
+    def histogram_forcast(self):
         # prewarm window is head 5th percentile of IT distribution
-        prewarm_window = np.percentile(hist[1], 5)
+        prewarm_window = int(np.percentile(self.in_bound_idle_time_lists, 5))
         # keep alive window is tail 99th percentile of IT distribution
-        keep_alive_window = np.percentile(hist[1], 99)
+        keep_alive_window = int(np.percentile(self.in_bound_idle_time_lists, 99))
         return prewarm_window, keep_alive_window
 
     def vis_histogram(self, data, title='App\'s Idle Time Distribution'):
         plt.clf()
-        plt.hist(data, bins=40, facecolor="blue",
+        plt.hist(data, bins=self.bins_num, facecolor="blue",
                  edgecolor="black", alpha=0.7)
         plt.xlabel("Idle Time")
         plt.ylabel("Frequency")
@@ -143,8 +148,8 @@ class HybridHistogramPolicyWorker(object):
         return idle_time_cv
 
     def is_pattern_representative(self, hist, bins):
-        it_cv = self.caculate_idle_time_cv(hist, bins)
-        if it_cv > self.config.idle_time_cv_thres:
+        self.it_cv = self.caculate_idle_time_cv(hist, bins)
+        if self.it_cv > self.config.idle_time_cv_thres:
             return True
         else:
             return False
@@ -173,7 +178,12 @@ class HybridHistogramPolicyWorker(object):
         return {
             "idle_time": self.in_bound_idle_time_lists,
             "invoc_count": self.invoc_count,
-            "oob_count": self.oob_count
+            "oob_count": self.oob_count,
+            "prewarm_win": self.prewarm_window,
+            "keep_alive_win": self.keep_alive_window,
+            "it_cv": self.it_cv,
+            "is_hist_triggered": self.is_hist_triggered,
+            "is_arima_triggered": self.is_arima_triggered
         }
 
     # def process_invocation(self, curr_time):
