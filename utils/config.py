@@ -13,9 +13,10 @@ class Config(object):
     def load_yaml(self, path):
         with open(path, 'r') as f:
             config = yaml.safe_load(f)
-            self.idle_time_uper_bound = config['idle_time_uper_bound']
-            self.min_invoc_count = config['min_invoc_count']
-            self.max_oob_count = config['max_oob_count']
-            self.idle_time_cv_thres = config['idle_time_cv_thres']
-            self.prewarm_window_ratio = config['prewarm_window_ratio']
-            self.keep_alive_window_ratio = config['keep_alive_window_ratio']
+            self.idle_time_uper_bound = config.get('idle_time_uper_bound',None)
+            self.min_invoc_count = config.get('min_invoc_count',None)
+            self.max_oob_count = config.get('max_oob_count',None)
+            self.idle_time_cv_thres = config.get('idle_time_cv_thres',None)
+            self.prewarm_window_ratio = config.get('prewarm_window_ratio',None)
+            self.keep_alive_window_ratio = config.get('keep_alive_window_ratio',None)
+            self.fix_keep_alive_window_size = config.get('fix_keep_alive_window_size',None)
