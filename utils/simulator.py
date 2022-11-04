@@ -141,8 +141,8 @@ class faasSimulator:
 
     def run_sim(self):
 
-        chunk_size = len(self.apps_lst) // 10
-        with Pool(10) as p:
+        chunk_size = len(self.apps_lst) // 5
+        with Pool(5) as p:
             p.map(self.run_sim_app_lst, [self.apps_lst[i:i + chunk_size]
                   for i in range(0, len(self.apps_lst), chunk_size)])
 
@@ -154,8 +154,12 @@ class faasSimulator:
         if not exists(output_dir):
             makedirs(output_dir)
         for i, app in enumerate(apps_lst):
-            # if exists(join(output_dir,f"{app.app_id}.json")):
-            #     continue
+            hasRun = False
+            for _, _, files in os.walk(output_dir+"/"):
+                if f"{app.app_id}.json" in files:
+                    hasRun = True
+            if hasRun: continue
+
             for t in range(self.total_step):
                 print(
                     f"Simulating step {t}/{self.total_step} in {i}/{len(apps_lst)} app", end="\r")
@@ -164,6 +168,9 @@ class faasSimulator:
                 if t == self.total_step-1 and self.save_vis_hist:
                     app.policy_worker.vis_histogram(
                         app.policy_worker.in_bound_idle_time_lists)
+                if "HybridHistogramPolicy" in app.policy_worker.get_name(app.policy_worker.config):
+                    if app.policy_worker.is_arima_triggered:
+                        break
             result = app.get_record()
             if "HybridHistogramPolicy" in app.policy_worker.get_name(app.policy_worker.config):
                 if app.policy_worker.is_hist_triggered:
@@ -200,10 +207,10 @@ class fakeAPP:
         if self.run_state and isIdle:
             # must record exec_state before it was change
             self.run_state_record.append(self.step_time)
-            self.end_exec() # change run_state
+            self.end_exec()  # change run_state
         elif invocs_lst:
             self.run_state = True
-            
+
         self.win_state.step()
         self.record_state()
         self.step_time += 1
@@ -215,7 +222,7 @@ class fakeAPP:
         self.run_state = False
 
         # At the end of execution, need to change to pre-warm state
-        self.win_state.start()
+        self.win_state.enter_prewarm()
         # if prewarm_win is 0, then env_state will be updated to True in env_step()
         self.releases_record.append(self.step_time)
 
@@ -236,7 +243,7 @@ class fakeAPP:
 
         Args:
             invocs_lst (_type_): list of invocations.
-        """        
+        """
         if invocs_lst:
             if not self.run_state:
                 if not self.get_env_state():
@@ -250,7 +257,7 @@ class fakeAPP:
                         self.step_time - self.releases_record[-1])
             else:
                 self.warmstart_record.append(self.step_time)
-            
+
             for func_id in invocs_lst:
                 assert func_id in self.func_dict.keys(
                 ), "Function ID not found, please register it first"
@@ -291,7 +298,8 @@ class fakeAPP:
             "warmstart": self.warmstart_record,
             "warm_state": self.warm_state_record,
             "run_state": self.run_state_record,
-            "win_state": self.win_state_record,
+            "prewarm_win": sepConsNums(self.prewarm_win_state_record),
+            "keeplive_win": sepConsNums(self.keeplive_win_state_record),
             "policy_record": self.policy_worker.get_record()
         }
 
@@ -328,13 +336,15 @@ class windowState:
         self.prewarm_win = prewarm_win
         self.keep_alive_win = keep_alive_win
         self.count = self.prewarm_win
-        self.enable = True
+        self.enable = False
 
     def step(self):
         if self.enable:
-            while (self.count == 0):
-                # Change from keep-alive to pre-warm
-                self.enter_prewarm() if self.state else self.enter_keep_alive()
+            if self.count == 0:
+                if self.state == 0:
+                    self.enter_keep_alive()
+                else:
+                    self.enable = False
 
             self.count -= 1
 
@@ -343,12 +353,10 @@ class windowState:
         self.count = self.prewarm_win
         self.state = False
 
-    def start(self):
-        self.enable = True
-
     def enter_prewarm(self):
         self.count = self.prewarm_win
         self.state = False
+        self.enable = True
 
     def enter_keep_alive(self):
         self.count = self.keep_alive_win
@@ -371,8 +379,27 @@ def getAttrsFromObjects(list_of_objects, attr_name):
     return list_of_attr
 
 
+def sepConsNums(list_of_numbers):
+    list_of_lists = []
+    for i in range(len(list_of_numbers)):
+        if i == 0:
+            list_of_lists.append([list_of_numbers[i]])
+        else:
+            if list_of_numbers[i] == list_of_numbers[i-1] + 1:
+                if i == len(list_of_numbers) - 1:
+                    list_of_lists[-1].append(list_of_numbers[i])
+                else:
+                    continue
+
+            else:
+                list_of_lists[-1].append(list_of_numbers[i-1])
+                list_of_lists.append([list_of_numbers[i]])
+    return list_of_lists
+
+
 def main():
     faasSimulator("data/azurefunctions-dataset2019.json", None)
+    # sepConsNums([1,3,4,5,6,7,8,15,16])
 
 
 if __name__ == '__main__':
