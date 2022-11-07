@@ -19,8 +19,8 @@ class HybridHistogramPolicyWorker(object):
     def __init__(self, config, app_id, vis_dir=join(ROOT_DIR, "results/vis_hist")):
         self.config = config
         self.bins_num = 20
-        self.keep_alive_window = 0
-        self.prewarm_window = 240
+        self.keep_alive_window = 10
+        self.prewarm_window = 0
         self.oob_count = 0
         self.invoc_count = 0
         self.app_id = app_id

@@ -194,7 +194,7 @@ class faasSimulator:
 class fakeAPP:
     def __init__(self, app_id, POLICY_WORKER_CLASS, worker_config):
         self.app_id = app_id
-        self.win_state = windowState(240, 0)
+        self.win_state = windowState(0, 10)
         self.run_state = False  # app not running => false, running => true
         self.func_dict = {}
         self.policy_worker = POLICY_WORKER_CLASS(worker_config, app_id)
