@@ -141,12 +141,12 @@ class faasSimulator:
 
     def run_sim(self):
 
-        chunk_size = len(self.apps_lst) // 5
-        with Pool(5) as p:
-            p.map(self.run_sim_app_lst, [self.apps_lst[i:i + chunk_size]
-                  for i in range(0, len(self.apps_lst), chunk_size)])
+        # chunk_size = len(self.apps_lst) // 5
+        # with Pool(5) as p:
+        #     p.map(self.run_sim_app_lst, [self.apps_lst[i:i + chunk_size]
+        #           for i in range(0, len(self.apps_lst), chunk_size)])
 
-        # self.run_sim_app_lst(self.apps_lst)
+        self.run_sim_app_lst(self.apps_lst)
 
     def run_sim_app_lst(self, apps_lst):
         output_dir = join(
